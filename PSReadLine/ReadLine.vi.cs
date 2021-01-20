@@ -242,7 +242,8 @@ namespace Microsoft.PowerShell
                         _clipboard,
                         _singleton._current,
                         DeleteToEnd,
-                        arg));
+                        arg,
+                        adjustCursor: false));
 
                     _singleton._buffer.Remove(_singleton._current, length);
 
@@ -287,8 +288,9 @@ namespace Microsoft.PowerShell
                 _clipboard,
                 _singleton._current,
                 instigator,
-                arg
-                ));
+                arg,
+                adjustCursor: false));
+
             _singleton._buffer.Remove(_singleton._current, endPoint - _singleton._current);
             if (_singleton._current >= _singleton._buffer.Length)
             {
@@ -306,8 +308,9 @@ namespace Microsoft.PowerShell
                 _clipboard,
                 endPoint,
                 instigator,
-                arg
-                ));
+                arg,
+                adjustCursor: false));
+
             _singleton._buffer.Remove(endPoint, deleteLength);
             _singleton._current = endPoint;
             _singleton.Render();
@@ -331,8 +334,9 @@ namespace Microsoft.PowerShell
                 _clipboard,
                 _singleton._current,
                 ViDeleteGlob,
-                arg
-                ));
+                arg,
+                adjustCursor: false));
+
             _singleton._buffer.Remove(_singleton._current, length);
             if (_singleton._current >= _singleton._buffer.Length)
             {
@@ -363,8 +367,9 @@ namespace Microsoft.PowerShell
                 _clipboard,
                 _singleton._current,
                 DeleteEndOfWord,
-                arg
-                ));
+                arg,
+                adjustCursor: false));
+
             _singleton._buffer.Remove(_singleton._current, 1 + endPoint - _singleton._current);
             if (_singleton._current >= _singleton._buffer.Length)
             {
@@ -390,8 +395,9 @@ namespace Microsoft.PowerShell
                 _clipboard,
                 _singleton._current,
                 ViDeleteEndOfGlob,
-                arg
-                ));
+                arg,
+                adjustCursor: false));
+
             _singleton._buffer.Remove(_singleton._current, 1 + endPoint - _singleton._current);
             if (_singleton._current >= _singleton._buffer.Length)
             {
@@ -664,7 +670,13 @@ namespace Microsoft.PowerShell
                 if (Char.IsLetter(c))
                 {
                     char newChar = Char.IsUpper(c) ? Char.ToLower(c, CultureInfo.CurrentCulture) : char.ToUpper(c, CultureInfo.CurrentCulture);
-                    EditItem delEditItem = EditItemDelete.Create(c.ToString(), _singleton._current);
+                    EditItem delEditItem = EditItemDelete.Create(
+                        c.ToString(),
+                        _singleton._current,
+                        InvertCase,
+                        arg,
+                        adjustCursor: false);
+
                     EditItem insEditItem = EditItemInsertChar.Create(newChar, _singleton._current);
                     _singleton.SaveEditItem(GroupedEdit.Create(new List<EditItem>
                         {
@@ -700,19 +712,20 @@ namespace Microsoft.PowerShell
             if (cursor == bufferLength)
                 --cursor; // if at end of line, swap previous two chars
 
-            char current = _singleton._buffer[cursor];
-            char previous = _singleton._buffer[cursor - 1];
+            _singleton.SaveEditItem(EditItemSwapCharacters.Create(cursor));
+            _singleton.SwapCharactersImpl(cursor);
 
-            _singleton.StartEditGroup();
-            _singleton.SaveEditItem(EditItemDelete.Create(_singleton._buffer.ToString(cursor - 1, 2), cursor - 1));
-            _singleton.SaveEditItem(EditItemInsertChar.Create(current, cursor - 1));
-            _singleton.SaveEditItem(EditItemInsertChar.Create(previous, cursor));
-            _singleton.EndEditGroup();
-
-            _singleton._buffer[cursor] = previous;
-            _singleton._buffer[cursor - 1] = current;
             _singleton.MoveCursor(Math.Min(cursor + 1, cursorRightLimit));
             _singleton.Render();
+        }
+
+        private void SwapCharactersImpl(int cursor)
+        {
+            char current = _buffer[cursor];
+            char previous = _buffer[cursor - 1];
+
+            _buffer[cursor] = previous;
+            _buffer[cursor - 1] = current;
         }
 
         /// <summary>
@@ -725,7 +738,12 @@ namespace Microsoft.PowerShell
                 var i = GetFirstNonBlankOfLogicalLinePos(_singleton._current);
 
                 _singleton.SaveToClipboard(i, _singleton._current - i);
-                _singleton.SaveEditItem(EditItemDelete.Create(_clipboard, i, DeleteLineToFirstChar));
+                _singleton.SaveEditItem(EditItemDelete.Create(
+                    _clipboard,
+                    i,
+                    DeleteLineToFirstChar,
+                    arg,
+                    adjustCursor: false));
 
                 _singleton._buffer.Remove(i, _singleton._current - i);
                 _singleton._current = i;
@@ -895,8 +913,9 @@ namespace Microsoft.PowerShell
                 _clipboard,
                 deletePoint,
                 BackwardDeleteWord,
-                arg
-                ));
+                arg,
+                adjustCursor: false));
+
             _singleton._buffer.Remove(deletePoint, _singleton._current - deletePoint);
             _singleton._current = deletePoint;
             _singleton.Render();
@@ -928,8 +947,9 @@ namespace Microsoft.PowerShell
                 _clipboard,
                 deletePoint,
                 BackwardDeleteWord,
-                arg
-                ));
+                arg,
+                adjustCursor: false));
+
             _singleton._buffer.Remove(deletePoint, _singleton._current - deletePoint);
             _singleton._current = deletePoint;
             _singleton.Render();
@@ -967,7 +987,13 @@ namespace Microsoft.PowerShell
             int length = last - first + 1;
 
             _singleton.SaveToClipboard(first, length);
-            _singleton.SaveEditItem(EditItemDelete.Create(_clipboard, first, action));
+            _singleton.SaveEditItem(EditItemDelete.Create(
+                _clipboard,
+                first,
+                action,
+                instigatorArg: null,
+                adjustCursor: false));
+
             _singleton._current = first;
             _singleton._buffer.Remove(first, length);
             _singleton.Render();
@@ -1377,7 +1403,13 @@ namespace Microsoft.PowerShell
             {
                 _singleton._buffer[_singleton._current] = ' ';
                 _singleton._groupUndoHelper.StartGroup(ViJoinLines, arg);
-                _singleton.SaveEditItem(EditItemDelete.Create("\n", _singleton._current));
+                _singleton.SaveEditItem(EditItemDelete.Create(
+                    "\n",
+                    _singleton._current,
+                    ViJoinLines,
+                    arg,
+                    adjustCursor: false));
+
                 _singleton.SaveEditItem(EditItemInsertChar.Create(' ', _singleton._current));
                 _singleton._groupUndoHelper.EndGroup();
                 _singleton.Render();

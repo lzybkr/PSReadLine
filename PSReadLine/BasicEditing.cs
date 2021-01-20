@@ -108,7 +108,17 @@ namespace Microsoft.PowerShell
             {
                 int length = buffer.Length - current;
                 var str = buffer.ToString(current, length);
-                _singleton.SaveEditItem(EditItemDelete.Create(str, current));
+                var adjustCursorOnUndelete = _singleton.Options.EditMode != EditMode.Vi;
+
+                _singleton.SaveEditItem(
+                    EditItemDelete.Create(
+                        str,
+                        current,
+                        ForwardDeleteLine,
+                        arg,
+                        adjustCursorOnUndelete
+                    ));
+
                 buffer.Remove(current, length);
                 _singleton.Render();
             }
@@ -122,8 +132,18 @@ namespace Microsoft.PowerShell
         {
             if (_singleton._current > 0)
             {
+                var adjustCursorOnUndelete = _singleton.Options.EditMode != EditMode.Vi;
+
                 _clipboard.Record(_singleton._buffer, 0, _singleton._current);
-                _singleton.SaveEditItem(EditItemDelete.Create(_clipboard, 0));
+                _singleton.SaveEditItem(
+                    EditItemDelete.Create(
+                        _clipboard,
+                        0,
+                        BackwardDeleteLine,
+                        arg,
+                        adjustCursorOnUndelete
+                    ));
+
                 _singleton._buffer.Remove(0, _singleton._current);
                 _singleton._current = 0;
                 _singleton.Render();
@@ -149,13 +169,16 @@ namespace Microsoft.PowerShell
                 qty = Math.Min(qty, _singleton._current);
 
                 int startDeleteIndex = _singleton._current - qty;
+                var adjustCursorOnUndelete = _singleton.Options.EditMode != EditMode.Vi;
+
                 _singleton.SaveEditItem(
                     EditItemDelete.Create(
                         _singleton._buffer.ToString(startDeleteIndex, qty),
                         startDeleteIndex,
                         BackwardDeleteChar,
-                        arg)
-                        );
+                        arg,
+                        adjustCursorOnUndelete));
+
                 _singleton.SaveToClipboard(startDeleteIndex, qty);
                 _singleton._buffer.Remove(startDeleteIndex, qty);
                 _singleton._current = startDeleteIndex;
@@ -178,7 +201,15 @@ namespace Microsoft.PowerShell
                 {
                     qty = Math.Min(qty, _singleton._buffer.Length - _singleton._current);
 
-                    SaveEditItem(EditItemDelete.Create(_buffer.ToString(_current, qty), _current, DeleteChar, qty));
+                    var adjustCursorOnUndelete = Options.EditMode != EditMode.Vi;
+
+                    SaveEditItem(EditItemDelete.Create(
+                        _buffer.ToString(_current, qty),
+                        _current,
+                        DeleteChar,
+                        qty,
+                        adjustCursorOnUndelete));
+
                     SaveToClipboard(_current, qty);
                     _buffer.Remove(_current, qty);
                     if (_current >= _buffer.Length)
