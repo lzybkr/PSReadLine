@@ -44,6 +44,8 @@ namespace Microsoft.PowerShell
 
         private static readonly CancellationToken _defaultCancellationToken = new CancellationTokenSource().Token;
 
+        private static Action _handleIdleOverride;
+
         private bool _delayedOneTimeInitCompleted;
 
         private IPSConsoleReadLineMockableMethods _mockableMethods;
@@ -196,11 +198,16 @@ namespace Microsoft.PowerShell
                     //   - a key is pressed
                     //   - the console is exiting
                     //   - 300ms - to process events if we're idle
-                    //   - processing of events is requested externally
                     //   - ReadLine cancellation is requested externally
                     handleId = WaitHandle.WaitAny(_singleton._requestKeyWaitHandles, 300);
                     if (handleId != WaitHandle.WaitTimeout && handleId != EventProcessingRequested)
                         break;
+
+                    if (_handleIdleOverride != null)
+                    {
+                        _handleIdleOverride();
+                        continue;
+                    }
 
                     // If we timed out, check for event subscribers (which is just
                     // a hint that there might be an event waiting to be processed.)
@@ -666,10 +673,6 @@ namespace Microsoft.PowerShell
             _savedCurrentLine = new HistoryItem();
             _queuedKeys = new Queue<PSKeyInfo>();
 
-            // Initialize this event handler early because it could be used by PowerShell
-            // Editor Services before 'DelayedOneTimeInitialize' runs.
-            _forceEventWaitHandle = new AutoResetEvent(false);
-
             string hostName = null;
             // This works mostly by luck - we're not doing anything to guarantee the constructor for our
             // singleton is called on a thread with a runspace, but it is happening by coincidence.
@@ -860,7 +863,7 @@ namespace Microsoft.PowerShell
             _singleton._readKeyWaitHandle = new AutoResetEvent(false);
             _singleton._keyReadWaitHandle = new AutoResetEvent(false);
             _singleton._closingWaitHandle = new ManualResetEvent(false);
-            _singleton._requestKeyWaitHandles = new WaitHandle[] {_singleton._keyReadWaitHandle, _singleton._closingWaitHandle, _defaultCancellationToken.WaitHandle, _singleton._forceEventWaitHandle};
+            _singleton._requestKeyWaitHandles = new WaitHandle[] {_singleton._keyReadWaitHandle, _singleton._closingWaitHandle, _defaultCancellationToken.WaitHandle};
             _singleton._threadProcWaitHandles = new WaitHandle[] {_singleton._readKeyWaitHandle, _singleton._closingWaitHandle};
 
             // This is for a "being hosted in an alternate appdomain scenario" (the
@@ -878,17 +881,6 @@ namespace Microsoft.PowerShell
 
             _singleton._readKeyThread = new Thread(_singleton.ReadKeyThreadProc) {IsBackground = true, Name = "PSReadLine ReadKey Thread"};
             _singleton._readKeyThread.Start();
-        }
-
-        /// <summary>
-        /// Used by PowerShellEditorServices to force immediate
-        /// event handling during the <see cref="PSConsoleReadLine.ReadKey" />
-        /// method. This is not a public API, but it is part of a private contract
-        /// with that project.
-        /// </summary>
-        private static void ForcePSEventHandling()
-        {
-            _singleton._forceEventWaitHandle.Set();
         }
 
         private static void Chord(ConsoleKeyInfo? key = null, object arg = null)
